@@ -1,0 +1,31 @@
+name: PR190 Windows host validation
+on:
+  push:
+    branches: [validation/pr190-windows]
+permissions:
+  contents: read
+jobs:
+  disk-host:
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure disk host tests
+        shell: pwsh
+        run: |
+          cmake -S . -B build-host -A x64 -DSTRATA_ENABLE_CUDA=OFF -DSTRATA_ENABLE_HIP=OFF -DSTRATA_NATIVE_EXPERTS=OFF -DSTRATA_BUILD_TESTS=OFF -DSTRATA_BUILD_CONVERSATION_TESTS=ON -DSTRATA_ENABLE_CONVERSATION_DISK=ON
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build host tests
+        run: cmake --build build-host --config Release --parallel 2 --target conversation_file_test conversation_store_test conversation_cache_test conversation_memory_test conv_cache_test
+      - name: Run host tests
+        shell: pwsh
+        run: |
+          $env:PATH = "C:\Program Files\OpenSSL-Win64\bin;$env:PATH"
+          ctest --test-dir build-host -C Release --output-on-failure -R '^(conversation_file_test|conversation_store_test|conversation_cache_test|conversation_memory_test|conv_cache_test)$'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Preserve CTest results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-host-results
+          path: build-host/Testing/Temporary/
